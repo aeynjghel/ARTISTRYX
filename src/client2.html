@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>ArtistryX JS Client</title>
+</head>
+
+<body>
+
+  <h2>ArtistryX JS Client</h2>
+  <!-- Displays the currently logged in user ID stored in globalUserId -->
+  <p id="session">Not logged in</p>
+
+  <label><b>Action:</b></label>
+  <select id="menu" onchange="showSection(this.value)">
+    <option value="">-- Select --</option>
+    <option value="register">Register</option>
+    <option value="login">Login</option>
+    <option value="create-seller">Create Seller</option>
+    <option value="read-seller">Read Seller Info</option>
+    <option value="update-seller">Update Shop Name</option>
+  </select>
+
+  <hr />
+
+  <!-- Register Form -->
+  <div id="section-register" style="display:none">
+    <h3>Register</h3>
+    <input id="reg-username" type="text" placeholder="Username" /><br /><br />
+    <input id="reg-email" type="email" placeholder="Email" /><br /><br />
+    <input id="reg-password" type="password" placeholder="Password" /><br /><br />
+    <button onclick="doRegister()">Register</button>
+  </div>
+
+  <!-- Login Form -->
+  <div id="section-login" style="display:none">
+    <h3>Login</h3>
+    <input id="log-email" type="email" placeholder="Email" /><br /><br />
+    <input id="log-password" type="password" placeholder="Password" /><br /><br />
+    <button onclick="doLogin()">Login</button>
+  </div>
+
+  <!-- Create Seller Form -->
+  <div id="section-create-seller" style="display:none">
+    <h3>Create Seller</h3>
+    <input id="cs-userid" type="number" placeholder="User ID (blank = session)" /><br /><br />
+    <input id="cs-shopname" type="text" placeholder="Shop Name" /><br /><br />
+    <button onclick="doCreateSeller()">Create Seller</button>
+  </div>
+
+  <!-- Read Seller Form -->
+  <div id="section-read-seller" style="display:none">
+    <h3>Read Seller Info</h3>
+    <input id="rs-userid" type="number" placeholder="User ID (blank = session)" /><br /><br />
+    <button onclick="doReadSeller()">Read Seller</button>
+  </div>
+
+  <!-- Update Seller Form -->
+  <div id="section-update-seller" style="display:none">
+    <h3>Update Shop Name</h3>
+    <input id="us-userid" type="number" placeholder="User ID (blank = session)" /><br /><br />
+    <input id="us-newshopname" type="text" placeholder="New Shop Name" /><br /><br />
+    <button onclick="doUpdateSeller()">Update Shop Name</button>
+  </div>
+
+  <!-- Output Area -->
+  <div id="output-area" style="display:none">
+    <hr />
+    <b id="output-label">Response</b>
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    const BASE_URL = 'http://localhost/ARTISTRYX/src/service.php';
+    // globalUserId acts as a primitive session storage to avoid re-typing IDs
+    let globalUserId = null;
+
+    const SECTIONS = ['register', 'login', 'create-seller', 'read-seller', 'update-seller'];
+
+    // Toggles visibility of form sections based on dropdown selection
+    function showSection(name) {
+      SECTIONS.forEach(s => {
+        document.getElementById('section-' + s).style.display = (s === name) ? 'block' : 'none';
+      });
+      // Clear output when switching sections to keep UI clean
+      document.getElementById('output-area').style.display = 'none';
+    }
+
+    /**
+     * Generic wrapper for fetch requests.
+     * Handles the common logic for JSON headers and body stringification.
+     */
+    async function sendRequest(method, url, data = null) {
+      const options = {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      };
+
+      // Query params are usually in the URL for GET, so we only add body for other methods
+      if (data && method !== 'GET') {
+        options.body = JSON.stringify(data);
+      }
+
+      const res = await fetch(url, options);
+      const text = await res.text();
+
+      try {
+        // Attempt to parse JSON response from the PHP API
+        return {
+          status: res.status,
+          data: JSON.parse(text)
+        };
+      } catch (err) {
+        // If PHP returns an error (HTML/Text) instead of JSON, we capture the raw response
+        return {
+          status: res.status,
+          data: {
+            error: 'Invalid JSON',
+            raw: text
+          }
+        };
+      }
+    }
+
+    // Displays the API results in the output area
+    function show(result) {
+      const area = document.getElementById('output-area');
+      const label = document.getElementById('output-label');
+      const pre = document.getElementById('output');
+
+      const ok = result.status >= 200 && result.status < 300;
+      // Removed emojis for a cleaner text-only status
+      label.textContent = 'Response — HTTP ' + result.status + (ok ? ' (Success)' : ' (Error)');
+      pre.textContent = JSON.stringify(result.data, null, 2);
+      area.style.display = 'block';
+    }
+
+    // Displays network or unexpected execution errors
+    function showError(msg) {
+      const area = document.getElementById('output-area');
+      document.getElementById('output-label').textContent = 'Network Error';
+      document.getElementById('output').textContent = msg;
+      area.style.display = 'block';
+    }
+
+    async function doRegister() {
+      const username = document.getElementById('reg-username').value.trim();
+      const email = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-password').value.trim();
+
+      if (!username || !email || !password) {
+        return alert('All fields are required.');
+      }
+
+      try {
+        const result = await sendRequest('POST', BASE_URL, {
+          action: 'register',
+          username,
+          email,
+          password
+        });
+        show(result);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function doLogin() {
+      const email = document.getElementById('log-email').value.trim();
+      const password = document.getElementById('log-password').value.trim();
+
+      if (!email || !password) {
+        return alert('All fields are required.');
+      }
+
+      try {
+        const result = await sendRequest('POST', BASE_URL, {
+          action: 'login',
+          email,
+          password
+        });
+        show(result);
+
+        // If login successful, cache the user ID globally for subsequent seller actions
+        if (result.data?.status === 'success' && result.data?.user?.id) {
+          globalUserId = result.data.user.id;
+          document.getElementById('session').textContent = 'Logged in — User ID: ' + globalUserId;
+        }
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function doCreateSeller() {
+      // Use manually entered ID if provided, otherwise fallback to the logged-in user session
+      const userId = document.getElementById('cs-userid').value.trim() || globalUserId;
+      const shopName = document.getElementById('cs-shopname').value.trim();
+
+      if (!userId) {
+        return alert('userId required. Login first or enter manually.');
+      }
+      if (!shopName) {
+        return alert('Shop name is required.');
+      }
+
+      try {
+        const result = await sendRequest('POST', BASE_URL, {
+          userId,
+          shopName
+        });
+        show(result);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function doReadSeller() {
+      // Logic for GET requires appending parameters to the URL string
+      const userId = document.getElementById('rs-userid').value.trim() || globalUserId;
+
+      if (!userId) {
+        return alert('userId required. Login first or enter manually.');
+      }
+
+      try {
+        // encodeURIComponent ensures the userId is safe for inclusion in the URL
+        const result = await sendRequest('GET', BASE_URL + '?userId=' + encodeURIComponent(userId));
+        show(result);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+
+    async function doUpdateSeller() {
+      const userId = document.getElementById('us-userid').value.trim() || globalUserId;
+      const newShopName = document.getElementById('us-newshopname').value.trim();
+
+      if (!userId) {
+        return alert('userId required. Login first or enter manually.');
+      }
+      if (!newShopName) {
+        return alert('New shop name is required.');
+      }
+
+      try {
+        // PUT method used for updates as per REST conventions
+        const result = await sendRequest('PUT', BASE_URL, {
+          userId,
+          newShopName
+        });
+        show(result);
+      } catch (e) {
+        showError(e.message);
+      }
+    }
+  </script>
+
+</body>
+
+</html>
